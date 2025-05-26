@@ -1,40 +1,28 @@
 import os
 import json
+import time
+import pandas as pd
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from bs4 import BeautifulSoup
+from oauth2client.service_account import ServiceAccountCredentials
+import gspread
+import smtplib
+from email.message import EmailMessage
 
-# Write the JSON creds file from environment variable
+# ---------- Recreate Google Sheets credentials from ENV ----------
 json_str = os.getenv("GOOGLE_CREDS_JSON")
-
 if not json_str:
     raise ValueError("GOOGLE_CREDS_JSON environment variable is missing!")
 
 with open("client_secret.json", "w") as f:
     f.write(json_str)
 
-# Now authenticate with Google Sheets
-from oauth2client.service_account import ServiceAccountCredentials
-import gspread
-
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("client_secret.json", scope)
-client = gspread.authorize(creds)
-
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
-from bs4 import BeautifulSoup
-import pandas as pd
-
-from oauth2client.service_account import ServiceAccountCredentials
-import smtplib
-from email.message import EmailMessage
-import time
-
-
-
 # ---------- Google Sheets Setup ----------
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds_path = "client_secret.json"  # Load this from env in Railway
+creds_path = "client_secret.json"
 creds = ServiceAccountCredentials.from_json_keyfile_name(creds_path, scope)
 client = gspread.authorize(creds)
 sheet = client.open("DTI_BNRS_Leads").sheet1
