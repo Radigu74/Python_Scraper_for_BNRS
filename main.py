@@ -26,11 +26,10 @@ try:
     client = gspread.authorize(creds)
 
     spreadsheet_id = "DTI_BNRS_Leads"
-    sheet =  client.open("DTI_BNRS_Leads").sheet1
+    sheet = client.open("DTI_BNRS_Leads").sheet1
     existing_names = set(row[0] for row in sheet.get_all_values()[1:])
     print(f"📄 Loaded sheet, {len(existing_names)} existing entries")
 
-    # Scraping logic
     keywords = ["trading", "services", "construction"]
     new_entries = []
 
@@ -40,7 +39,7 @@ try:
             page = await browser.new_page()
 
             for keyword in keywords:
-                print(f"🔍 Searching for keyword: {keyword}")
+                print(f"🔍 Searching BNRS for keyword: {keyword}")
                 url = f"https://bnrs.dti.gov.ph/search?keyword={keyword}"
                 await page.goto(url)
                 await page.wait_for_timeout(4000)
@@ -64,7 +63,6 @@ try:
                                 new_entries.append(business)
                                 existing_names.add(name)
 
-                    # Pagination
                     try:
                         next_button = await page.query_selector("a[ng-click='nextPage()']")
                         if next_button:
@@ -73,15 +71,55 @@ try:
                         else:
                             break
                     except Exception as e:
-                        print(f"⚠️ Pagination failed: {e}")
+                        print(f"⚠️ BNRS pagination failed: {e}")
                         break
 
             await browser.close()
 
-    asyncio.run(scrape_bnrs())
+    async def scrape_sec_crs():
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            page = await browser.new_page()
+            print("🔍 Accessing SEC CRS")
+
+            await page.goto("https://crs.sec.gov.ph/\#!/")
+            await page.wait_for_timeout(5000)
+
+            try:
+                search_box = await page.wait_for_selector("input[placeholder='Search Business Name']", timeout=10000)
+                await search_box.fill("trading")
+                await page.keyboard.press("Enter")
+                await page.wait_for_timeout(5000)
+
+                html = await page.content()
+                soup = BeautifulSoup(html, "html.parser")
+                results = soup.find_all("div", class_="company-result")
+
+                for result in results:
+                    name_el = result.find("h4")
+                    if name_el:
+                        name = name_el.get_text(strip=True)
+                        if name not in existing_names:
+                            business = {
+                                "Business Name": name,
+                                "Business Scope": "N/A",
+                                "Business Location": "N/A",
+                                "Date Registered": "N/A"
+                            }
+                            new_entries.append(business)
+                            existing_names.add(name)
+            except Exception as e:
+                print(f"⚠️ SEC scraping failed: {e}")
+
+            await browser.close()
+
+    async def main():
+        await scrape_bnrs()
+        await scrape_sec_crs()
+
+    asyncio.run(main())
     print(f"🧹 Scraped {len(new_entries)} new entries")
 
-    # Save to Google Sheets
     for entry in new_entries:
         sheet.append_row([
             entry["Business Name"],
@@ -91,7 +129,6 @@ try:
         ])
     print("📤 Uploaded new entries to Google Sheets")
 
-    # Send Email
     if new_entries:
         msg = EmailMessage()
         msg["Subject"] = "New DTI Business Leads Added"
