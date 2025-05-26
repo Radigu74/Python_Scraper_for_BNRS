@@ -11,6 +11,8 @@ from oauth2client.service_account import ServiceAccountCredentials
 import gspread
 import smtplib
 from email.message import EmailMessage
+from playwright.async_api import async_playwright
+
 
 # ---------- Recreate Google Sheets credentials from ENV ----------
 json_str = os.getenv("GOOGLE_CREDS_JSON")
