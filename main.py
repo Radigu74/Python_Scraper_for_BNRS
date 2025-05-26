@@ -82,7 +82,7 @@ try:
             page = await browser.new_page()
             print("🔍 Accessing SEC CRS")
 
-            await page.goto(r"https://crs.sec.gov.ph/#!/")
+            await page.goto("https://crs.sec.gov.ph/#!/", wait_until="domcontentloaded")
             await page.wait_for_timeout(5000)
 
             try:
