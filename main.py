@@ -1,18 +1,13 @@
 import os
 import json
-import time
+import asyncio
 import pandas as pd
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
 from bs4 import BeautifulSoup
 from oauth2client.service_account import ServiceAccountCredentials
 import gspread
 import smtplib
 from email.message import EmailMessage
 from playwright.async_api import async_playwright
-
 
 # ---------- Recreate Google Sheets credentials from ENV ----------
 json_str = os.getenv("GOOGLE_CREDS_JSON")
@@ -30,48 +25,54 @@ client = gspread.authorize(creds)
 sheet = client.open("DTI_BNRS_Leads").sheet1
 existing_names = set(row[0] for row in sheet.get_all_values()[1:])  # Skip headers
 
-# ---------- Selenium Setup ----------
-chrome_options = Options()
-chrome_options.add_argument("--headless")
-chrome_options.add_argument("--no-sandbox")
-chrome_options.add_argument("--disable-dev-shm-usage")
-driver = webdriver.Chrome(service=Service("/usr/bin/chromedriver"), options=chrome_options)
-
-# ---------- Scrape & De-Dupe ----------
+# ---------- Playwright Scraping ----------
 keywords = ["trading", "services", "construction"]
 new_entries = []
 
-for keyword in keywords:
-    url = f"https://bnrs.dti.gov.ph/search?keyword={keyword}"
-    driver.get(url)
-    time.sleep(4)
+async def scrape_bnrs():
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        page = await browser.new_page()
 
-    for page in range(1, 4):
-        soup = BeautifulSoup(driver.page_source, "html.parser")
-        results = soup.find_all("tr", {"class": "ng-scope"})
+        for keyword in keywords:
+            url = f"https://bnrs.dti.gov.ph/search?keyword={keyword}"
+            await page.goto(url)
+            await page.wait_for_timeout(4000)
 
-        for result in results:
-            cols = result.find_all("td")
-            if len(cols) >= 4:
-                name = cols[0].text.strip()
-                if name not in existing_names:
-                    business = {
-                        "Business Name": name,
-                        "Business Scope": cols[1].text.strip(),
-                        "Business Location": cols[2].text.strip(),
-                        "Date Registered": cols[3].text.strip()
-                    }
-                    new_entries.append(business)
-                    existing_names.add(name)
+            for _ in range(3):  # Limit to 3 pages
+                html = await page.content()
+                soup = BeautifulSoup(html, "html.parser")
+                rows = soup.find_all("tr", {"class": "ng-scope"})
 
-        try:
-            next_button = driver.find_element(By.LINK_TEXT, "Next")
-            next_button.click()
-            time.sleep(2)
-        except:
-            break
+                for row in rows:
+                    cols = row.find_all("td")
+                    if len(cols) >= 4:
+                        name = cols[0].text.strip()
+                        if name not in existing_names:
+                            business = {
+                                "Business Name": name,
+                                "Business Scope": cols[1].text.strip(),
+                                "Business Location": cols[2].text.strip(),
+                                "Date Registered": cols[3].text.strip()
+                            }
+                            new_entries.append(business)
+                            existing_names.add(name)
 
-driver.quit()
+                # Try to click "Next"
+                try:
+                    next_button = await page.query_selector("a[ng-click='nextPage()']")
+                    if next_button:
+                        await next_button.click()
+                        await page.wait_for_timeout(2000)
+                    else:
+                        break
+                except:
+                    break
+
+        await browser.close()
+
+# ---------- Run the scraper ----------
+asyncio.run(scrape_bnrs())
 
 # ---------- Save to Google Sheets ----------
 for entry in new_entries:
