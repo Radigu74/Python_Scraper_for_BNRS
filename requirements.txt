@@ -1,5 +1,5 @@
-selenium
-beautifulsoup4
-pandas
-gspread
-oauth2client
+selenium==4.20.0
+beautifulsoup4==4.12.3
+pandas==2.2.2
+gspread==5.12.0
+oauth2client==4.1.3
