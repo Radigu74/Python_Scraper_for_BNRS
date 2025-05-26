@@ -1,4 +1,4 @@
-selenium==4.20.0
+playwright
 beautifulsoup4==4.12.3
 pandas==2.2.2
 gspread==5.12.0
